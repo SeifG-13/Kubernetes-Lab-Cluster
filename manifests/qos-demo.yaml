@@ -1,0 +1,46 @@
+# Guaranteed — requests == limits on ALL containers
+# Last to be evicted. Used for critical workloads.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-guaranteed
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+---
+# Burstable — requests set, limits differ (or limits not set on some containers)
+# Middle priority. Most production workloads.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-burstable
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+---
+# BestEffort — NO requests or limits set at all
+# First to be evicted under memory pressure. Never use in production.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-besteffort
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25

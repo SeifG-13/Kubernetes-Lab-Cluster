@@ -1,0 +1,45 @@
+# PV — the actual storage (hostPath for lab, NFS/cloud disk in production)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: demo-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce      # Only one node can mount read/write at a time
+  persistentVolumeReclaimPolicy: Retain   # Don't delete data when PVC is released
+  hostPath:
+    path: /mnt/k8s-pv-demo
+---
+# PVC — the claim (Kubernetes binds this to demo-pv automatically)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Pod that writes data, then we'll delete it and prove data survives
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-writer
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: worker1   # Pin to worker1 where the hostPath exists
+  containers:
+  - name: writer
+    image: busybox
+    command: ["sh", "-c", "echo 'data written by pod at '$(date) > /data/test.txt && cat /data/test.txt && sleep 3600"]
+    volumeMounts:
+    - name: storage
+      mountPath: /data
+  volumes:
+  - name: storage
+    persistentVolumeClaim:
+      claimName: demo-pvc

@@ -1,0 +1,71 @@
+# kube-prometheus-stack values tuned for 2GB RAM nodes
+# Strips down resource requests so the stack fits on this lab cluster
+
+grafana:
+  enabled: true
+  adminPassword: "admin123"
+  service:
+    type: NodePort
+    nodePort: 30300
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # Disable unused features to save RAM
+  sidecar:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+prometheus:
+  prometheusSpec:
+    retention: 6h          # don't accumulate data on small disk
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Only scrape this cluster (no remote write)
+    replicaExternalLabelName: ""
+    storageSpec: {}        # no PVC — in-memory only for lab
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+# Node exporter — runs on every node (DaemonSet)
+nodeExporter:
+  enabled: true
+
+# kube-state-metrics — exposes k8s object metrics
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+# Disable components that need extra RBAC on bare-metal
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false

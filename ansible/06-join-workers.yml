@@ -1,0 +1,52 @@
+---
+# 06-join-workers.yml — Join worker1 and worker2 to the cluster
+- name: Join worker nodes
+  hosts: workers
+  become: true
+
+  tasks:
+    - name: Check if already joined
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Read join command from shared file
+      slurp:
+        src: /vagrant/join-worker.sh
+      register: join_script
+      when: not kubelet_conf.stat.exists
+
+    - name: Run join command
+      command: "{{ (join_script.content | b64decode).split('\n') | select('match', '^kubeadm') | first }}"
+      when: not kubelet_conf.stat.exists
+      register: join_result
+
+    - name: Show join result
+      debug:
+        msg: "{{ join_result.stdout_lines | default(['Already joined']) }}"
+
+# Verify from master1
+- name: Verify all nodes joined
+  hosts: masters
+  become: false
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+  tasks:
+    - name: Wait for workers to become Ready
+      command: kubectl wait node worker1 worker2 --for=condition=Ready --timeout=120s
+
+    - name: Label worker nodes
+      command: kubectl label node {{ item }} node-role.kubernetes.io/worker=worker --overwrite
+      loop:
+        - worker1
+        - worker2
+
+    - name: Show final cluster state
+      command: kubectl get nodes -o wide
+      register: nodes_out
+      changed_when: false
+
+    - name: Cluster nodes
+      debug:
+        msg: "{{ nodes_out.stdout_lines }}"

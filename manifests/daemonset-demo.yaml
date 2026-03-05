@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-collector
+spec:
+  selector:
+    matchLabels:
+      app: log-collector
+  template:
+    metadata:
+      labels:
+        app: log-collector
+    spec:
+      tolerations:
+      # This toleration lets the DaemonSet also run on the control plane node
+      # WHY: by default, control-plane nodes have a NoSchedule taint
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: collector
+        image: busybox
+        command: ["sh", "-c", "while true; do echo \"[$(date)] log from $(hostname)\"; sleep 10; done"]
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "20m"

@@ -1,0 +1,75 @@
+---
+# 03-kubeadm.yml — Install kubeadm, kubelet, kubectl on all nodes
+# WHY pin versions: accidental upgrades can break the cluster.
+#   kubelet must match the API server within 2 minor versions.
+- name: Install Kubernetes packages
+  hosts: k8s_nodes
+  become: true
+  vars:
+    k8s_version: "1.30"
+
+  tasks:
+    - name: Install apt prerequisites
+      apt:
+        name: [apt-transport-https, ca-certificates, curl, gpg]
+        state: present
+
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Kubernetes GPG key
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key \
+          | gpg --dearmor -o /etc/apt/keyrings/kubernetes-{{ k8s_version }}.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-{{ k8s_version }}.gpg
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: >
+          deb [signed-by=/etc/apt/keyrings/kubernetes-{{ k8s_version }}.gpg]
+          https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /
+        filename: kubernetes-{{ k8s_version }}
+        state: present
+
+    - name: Install kubeadm, kubelet, kubectl
+      apt:
+        name:
+          - kubeadm
+          - kubelet
+          - kubectl
+        state: present
+        update_cache: true
+
+    - name: Hold Kubernetes packages at current version
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubeadm
+        - kubelet
+        - kubectl
+
+    - name: Enable kubelet (starts after kubeadm init/join configures it)
+      systemd:
+        name: kubelet
+        enabled: true
+
+    - name: Verify installed versions
+      shell: "{{ item.cmd }}"
+      register: k8s_versions
+      changed_when: false
+      loop:
+        - { name: kubeadm, cmd: "kubeadm version -o short" }
+        - { name: kubelet, cmd: "kubelet --version" }
+        - { name: kubectl, cmd: "kubectl version --client --short 2>/dev/null || kubectl version --client" }
+
+    - name: Show versions
+      debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ k8s_versions.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

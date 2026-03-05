@@ -1,0 +1,48 @@
+---
+# 05-calico.yml — Deploy Calico CNI on master1
+# WHY CNI: pods have no IPs and can't communicate until a CNI plugin
+#   assigns addresses and sets up routing between nodes.
+- name: Deploy Calico CNI
+  hosts: masters
+  become: false
+
+  vars:
+    calico_version: "v3.28.0"
+
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+  tasks:
+    - name: Apply Calico manifest
+      command: >
+        kubectl apply -f
+        https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+
+    - name: Wait for calico-node DaemonSet to be ready
+      command: kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
+
+    - name: Wait for CoreDNS deployment to be ready
+      # WHY CoreDNS: once CoreDNS pods are Running, it proves CNI assigned them
+      # IPs and routing works — the best single health indicator post-CNI.
+      command: kubectl -n kube-system rollout status deployment/coredns --timeout=180s
+
+    - name: Wait for master1 node to be Ready
+      command: kubectl wait node master1 --for=condition=Ready --timeout=120s
+
+    - name: Show all system pods
+      command: kubectl get pods -n kube-system -o wide
+      register: pods_out
+      changed_when: false
+
+    - name: Show pod status
+      debug:
+        msg: "{{ pods_out.stdout_lines }}"
+
+    - name: Show nodes
+      command: kubectl get nodes -o wide
+      register: nodes_out
+      changed_when: false
+
+    - name: Show nodes status
+      debug:
+        msg: "{{ nodes_out.stdout_lines }}"

@@ -1,0 +1,82 @@
+---
+# 04-init-master.yml — Initialize the control plane on master1
+# Runs kubeadm init, sets up kubeconfig, saves join command for workers.
+- name: Initialize Kubernetes control plane
+  hosts: masters
+  become: true
+
+  vars:
+    pod_cidr: "192.168.0.0/16"   # Calico default — must not overlap node network
+    master_ip: "192.168.56.20"
+
+  tasks:
+    - name: Check if cluster already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeadm_conf
+
+    - name: Pull control plane images (speeds up init)
+      command: kubeadm config images pull
+      when: not kubeadm_conf.stat.exists
+
+    - name: Run kubeadm init
+      # WHY these flags:
+      #   --apiserver-advertise-address: the IP this apiserver binds on
+      #   --pod-network-cidr: IP range for pods (must match Calico config)
+      command: >
+        kubeadm init
+        --apiserver-advertise-address={{ master_ip }}
+        --pod-network-cidr={{ pod_cidr }}
+        --v=5
+      register: kubeadm_output
+      when: not kubeadm_conf.stat.exists
+
+    - name: Create .kube directory for vagrant user
+      file:
+        path: /home/vagrant/.kube
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: '0755'
+
+    - name: Copy admin.conf to vagrant user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/vagrant/.kube/config
+        remote_src: true
+        owner: vagrant
+        group: vagrant
+        mode: '0600'
+
+    - name: Also copy kubeconfig to /vagrant (synced to host laptop)
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /vagrant/admin.conf
+        remote_src: true
+        mode: '0600'
+
+    - name: Get worker join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+      changed_when: false
+
+    - name: Save join command to /vagrant/join-worker.sh (shared folder)
+      copy:
+        content: |
+          #!/usr/bin/env bash
+          # Run on worker nodes to join the cluster
+          {{ join_command.stdout }}
+        dest: /vagrant/join-worker.sh
+        mode: '0755'
+
+    - name: Verify nodes
+      command: kubectl get nodes -o wide
+      become: false
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: nodes_out
+      changed_when: false
+
+    - name: Show nodes (master1 will be NotReady until CNI is installed)
+      debug:
+        msg: "{{ nodes_out.stdout_lines }}"

@@ -1,0 +1,8 @@
+---
+# site.yml — Run from master1: ansible-playbook site.yml
+- import_playbook: 01-common.yml
+- import_playbook: 02-containerd.yml
+- import_playbook: 03-kubeadm.yml
+- import_playbook: 04-init-master.yml
+- import_playbook: 05-calico.yml
+- import_playbook: 06-join-workers.yml

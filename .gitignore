@@ -1,0 +1,14 @@
+# Vagrant
+.vagrant/
+
+# claude
+.claude/
+
+# Sensitive cluster files - do NOT commit
+admin.conf
+join-worker.sh
+
+# Temporary files
+tmp*
+*.tmp
+*.log
